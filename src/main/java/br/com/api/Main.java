@@ -2,6 +2,9 @@ package br.com.api;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import com.google.gson.Gson;
+
 import spark.Spark;
 import spark.Request;
 import spark.Response;
@@ -11,7 +14,36 @@ public class Main {
 
     private static List<Contato> listaContatos = new ArrayList<>();
     public static void main(String[] args) {
+
         Spark.port(8080);
+
+        //Lidando com o CORS
+        Spark.options("/*", new Route() {
+            @Override
+            public Object handle(Request requisicaoHttp, Response respostaHttp) throws Exception {
+
+                String accessControlRequestHeaders = requisicaoHttp.headers("Access-Control-Request-Headers");
+                
+                if (accessControlRequestHeaders != null) 
+                    respostaHttp.header("Access-Control-Allow-Headers", accessControlRequestHeaders);
+                
+                String accessControlRequestMethod = requisicaoHttp.headers("Access-Control-Request-Method");
+
+                if (accessControlRequestMethod != null) 
+                    respostaHttp.header("Access-Control-Allow-Methods", accessControlRequestMethod);
+                
+                return "OK";
+            }
+        });
+
+        //Informando o Browser que é aceito os metodos HTTP OPTIONS, GET, POST, PUT, DELETE para qualquer endereço
+        Spark.before(new spark.Filter() {
+            @Override
+            public void handle(Request requisicaoHttp, Response respostaHttp) throws Exception {
+                respostaHttp.header("Access-Control-Allow-Origin", "*"); // Permite todas as origens
+                respostaHttp.header("Access-Control-Allow-Methods", "OPTIONS, GET, POST, PUT, DELETE");
+            }
+        });
 
         Spark.get("/contato/listar", listarContatos());
         Spark.get("/contato/listar/cpf/:cpf", listarPorCpf());
@@ -20,9 +52,11 @@ public class Main {
 
         Spark.post("/contato/cadastrar", incluirContato());
         Spark.put("/contato/atualizar/:codigo", atualizarContato());
-        Spark.delete("/contato/deletar/:codigo/:nome", excluirContato());
+        Spark.delete("/contato/deletar/:codigo", excluirContato());
 
     }
+
+    //Endpoints Principais
 
     private static Route atualizarContato() {
         return new Route() {
@@ -32,29 +66,33 @@ public class Main {
 
                 if (listaContatos.isEmpty()) {
                     response.status(404); 
-                    return "Não existem contatos na base.";
+                    return new Gson().toJson("Não existem contatos na base.");
 
                 } else {
                     for(Contato pessoa : listaContatos){
                         if (pessoa.getId()  == id) {
-                            String cpf = request.queryParams("cpf");
-                            String nome = request.queryParams("nome");
-                            String idade = request.queryParams("idade");
 
-                            pessoa.setCpf(cpf);
-                            pessoa.setNome(nome);
-                            pessoa.setIdade(idade);
+                            // Converte o JSON recebido no corpo da requisição para um objeto Contato
+                            Contato contatoAtualizado = new Gson().fromJson(request.body(), Contato.class);
+
+                            // Atualiza os dados do contato
+
+                            pessoa.setCpf(contatoAtualizado.getCpf());
+                            pessoa.setNome(contatoAtualizado.getNome());
+                            pessoa.setIdade(contatoAtualizado.getIdade());
+                           
+                            response.type("application/json");
 
                             response.status(200);
 
-                            return "Usuário com ID " + id + " foi atualizado com sucesso!";
+                            return new Gson().toJson("Usuário com ID " + id + " foi atualizado com sucesso!");
 
                         }
                        
                     }
 
-                    response.status(404);
-                    return "Contato com o ID "+ id +" especificado não encontrado.";
+                    response.status(404); // 404 Not Found
+                    return new Gson().toJson("Contato com o ID " + id + " especificado não encontrado.");
                 }
 
             }
@@ -66,23 +104,23 @@ public class Main {
             @Override
             public Object handle(Request request, Response response) throws Exception {
                 int id = Integer.parseInt(request.params(":codigo"));
-                String nome = request.params(":nome").trim();
              
                 if (listaContatos.isEmpty()) {
                     response.status(404); // 404 Not Found
-                    return "Não existem contatos na base.";
+                    return new Gson().toJson("Não existem contatos na base");
                 } 
 
                 boolean contatoRemovido = listaContatos.removeIf(pessoa ->
-                 pessoa.getId() == id && pessoa.getNome().equalsIgnoreCase(nome)
-                );
+                pessoa.getId() == id);
 
                 if (contatoRemovido) {
+                    response.type("application/json"); // Define o tipo de conteúdo como JSON
+
                     response.status(200);
-                    return "Usuário com ID " + id + " e nome \"" + nome + "\" foi excluído com sucesso!";
+                    return new Gson().toJson("Usuário com ID " + id + " foi excluído com sucesso!");
                 } else {
                     response.status(404);
-                    return "Contato com ID " + id + " e nome \"" + nome + "\" não encontrado.";
+                    return new Gson().toJson("Contato com ID " + id + " não encontrado.");
                 }
             }
 
@@ -93,20 +131,18 @@ public class Main {
     private static Route incluirContato() {
         return new Route() {
             @Override
-
             public Object handle(Request request, Response response) throws Exception {
+                response.type("application/json");
+                Contato user = new Gson().fromJson(request.body(), Contato.class);
+                
+                user.setId(listaContatos.size() + 1);
 
-                String cpf = request.queryParams("cpf");
-                String nome = request.queryParams("nome");
-                String idade = request.queryParams("idade");
-
-                Contato novoContato = new Contato(cpf, nome, idade);
-
-                listaContatos.add(novoContato);
+                listaContatos.add(user);
 
                 response.status(201);
 
-                return "Contato incluído com sucesso!";
+                return new Gson()
+                .toJson(user);
 
             }
 
@@ -118,30 +154,20 @@ public class Main {
         return new Route() {
             @Override
             public Object handle(Request request, Response response) throws Exception {
-
-                String resposta = "";
-
-                // metodo isEmpty verifica se a lista esta vazia
-
-                if (listaContatos.isEmpty()) {
-
-                    resposta += "Nenhum contato cadastrado.";
-
-                } else {
-
-                    resposta += "\n--- Lista de Contatos ---";
-
-                    for (Contato pessoa : listaContatos) {
-                        resposta += "\n" + pessoa.toString();
-                    }
+                response.type("application/json");
+                List<Contato> contatos = new ArrayList<>();
+                for (Contato pessoa : listaContatos) {
+                    contatos.add(pessoa);
                 }
-
-                return resposta;
-
+                response.status(200);
+                return new Gson()
+                .toJson(contatos);
             }
-
         };
     }
+
+    //Endpoints Extra 
+    
 
     private static Route listarPorIdade() {
         return new Route() {

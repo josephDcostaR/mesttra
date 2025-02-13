@@ -2,7 +2,6 @@ package br.com.api;
 
 public class Contato {
 
-    public static int contador;
     private int id;
     public String cpf;
     public String nome;
@@ -11,8 +10,6 @@ public class Contato {
     public Contato() {}
 
     public Contato(String cpf, String nome, String idade) {
-        contador++;
-        this.id = contador;
         this.cpf = cpf;
         this.nome = nome;
         this.idade = idade;
@@ -20,6 +17,10 @@ public class Contato {
 
     public int getId() {
         return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 
     public String getCpf() {
